@@ -8,7 +8,7 @@ to minimize sum of squares by taking advantage of the problem structure.
    min_{x \in R^n }  F(x) := Sum_{i=1}^{mv}  v_err_i(x)^2
 where v_err(x) : R^n \to R^{mv} is a vector function.
 
-This subroutine seeks the least value of sum of the squres of the components of v_err(x)
+This subroutine seeks the least value of sum of the squares of the components of v_err(x)
 by combing trust region method and Levenberg-Marquardt method.
 
 References:
