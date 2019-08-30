@@ -129,23 +129,6 @@ extern int newuoa_h(const INTEGER n, const INTEGER npt,
 /* Get a textual explanation of the status returned by NEWUOA. */
 extern const char* newuoa_reason(int status);
 
-/*---------------------------------------------------------------------------*/
-/* TESTS */
-
-/* Test problem for NEWUOA,FIXME: the objective function being the sum of the
-   reciprocals of all pairwise distances between the points P_I,
-   I=1,2,...,M in two dimensions, where M=N/2 and where the components of
-   P_I are X(2*I-1) and X(2*I). Thus each vector X of N variables defines
-   the M points P_I. The initial X gives equally spaced points on a
-   circle. Four different choices of the pairs (N,NPT) are tried, namely
-   (10,16), (10,21), (20,26) and (20,41). Convergence to a local minimum
-   that is not global occurs in both the N=10 cases. The details of the
-   results are highly sensitive to computer rounding errors. The choice
-   IPRINT=2 provides the current X and optimal F so far whenever RHO is
-   reduced. The bound constraints of the problem require every component of
-   X to be in the interval [-1,1]. */
-extern void newuoa_h_test(void);
-
 #ifdef __cplusplus
 }
 #endif
