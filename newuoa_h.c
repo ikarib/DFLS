@@ -150,7 +150,6 @@ trsapp_h(const INTEGER n, const INTEGER npt, REAL *xopt,
 	if (SQRT(xoptsq) > delta * .25) {
 
 		/* Use the gradient at xopt to formulate J^t J */
-	
 		for (m1 = 1; m1 <= mv; ++m1) {
 			for (i = 1; i <= n; ++i)
 				gqv_opt[m1 + i * 400] = gqv[m1 + i * 400];
@@ -181,7 +180,6 @@ trsapp_h(const INTEGER n, const INTEGER npt, REAL *xopt,
 		}
 
 		/* Calculate the explicite Hessian. */
-
 		f_opt = f_value(mv, &v_opt[1]);
 		if (gnorm2 >= 1. || f_opt <= SQRT(gnorm2)) zero_res = 1;
 		else zero_res = 0;
@@ -210,7 +208,6 @@ trsapp_h(const INTEGER n, const INTEGER npt, REAL *xopt,
 	} else {
 
 		/* Use the gradient at xbase to formulate J^t J */
-
 		f_grad(mv, &v_base[1], &v_gtemp[1]);
 		gnorm2 = zero;
 		for (i = 1; i <= n; ++i) {
@@ -221,7 +218,6 @@ trsapp_h(const INTEGER n, const INTEGER npt, REAL *xopt,
 		}
 
 		/* Calculate the explicite Hessian. */
-
 		f_base = f_value(mv, &v_base[1]);
 		if (gnorm2 >= 1. || f_base <= SQRT(gnorm2)) zero_res = 1;
 		else zero_res = 0;
@@ -304,7 +300,7 @@ L40:
 	++iterc;
 	temp = delsq - ss;
 	bstep = temp / (ds + SQRT(ds * ds + dd * temp));
-	/* BSTEP=(-DS+DSQRT(DS*DS+DD*TEMP))/DD */
+	// bstep = (-ds + SQRT(ds * ds + dd * temp))/dd;
 	if (debug) fprintf(stdout, " BSTEP=%25.15E\n", bstep);
 	symv(n,&hq[1],&d[1],&hd[1]);
 	if (iterc>itersw) goto L120;
@@ -313,7 +309,6 @@ L40:
 		dhd += d[j] * hd[j];
 
 	/* Update CRVMIN and set the step-length ALPHA. */
-
 	alpha = bstep;
 	if (debug) fprintf(stdout, " ITERC=%6ld\n DHD/DD=%25.15E\n", (long)iterc, (double)(dhd/dd));
 	if (dhd > zero) {
@@ -326,7 +321,6 @@ L40:
 	qred += qadd;
 
 	/* Update STEP and HS. */
-
 	ggsav = gg;
 	gg = zero;
 	for (i = 1; i <= n; ++i) {
@@ -341,7 +335,6 @@ L40:
 	if (iterc == itermax) goto L160;
 
 	/* Begin another conjugate direction iteration if required. */
-
 	if (alpha < bstep) {
 		if (qadd <= qred * 1e-6) goto L160;
 		temp = gg / ggsav;
@@ -393,7 +386,6 @@ L120:
 	}
 
 	/* Seek the value of the angle that minimizes Q. */
-
 	cf = half * (shs - dhd);
 	qbeg = sg + cf;
 	qsav = qbeg;
@@ -1367,13 +1359,13 @@ print_error(const char* reason)
 static void
 print_x(FILE* output, INTEGER n, const REAL x[], const REAL dx[])
 {
-  INTEGER i;
-  for (i = 0; i < n; ++i) {
-    fprintf(output, "%s%15.6E%s",
-            ((i%5 == 0) ? "  " : ""),
-            (double)(dx == NULL ? x[i] : (x[i] + dx[i])),
-            ((i == n - 1 || i%5 == 4) ? "\n" : ""));
-  }
+	INTEGER i;
+	for (i = 0; i < n; ++i) {
+		fprintf(output, "%s%15.6E%s",
+			((i%5 == 0) ? "  " : ""),
+			(double)(dx == NULL ? x[i] : (x[i] + dx[i])),
+			((i == n - 1 || i%5 == 4) ? "\n" : ""));
+	}
 }
 
 /*   Important Notice: */
