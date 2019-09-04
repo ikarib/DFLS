@@ -55,111 +55,8 @@
 #define MAX(a,b) ((a) >= (b) ? (a) : (b))
 #define MIN(a,b) ((a) <= (b) ? (a) : (b))
 
-/*---------------------------------------------------------------------------
-   TESTING
-   The Chebyquad test problem (Fletcher, 1965) for N = 2,4,6 and 8,
-   with NPT = 2N+1.
-
-   Test problem for NEWUOA,FIXME: the objective function being the sum of the
-   reciprocals of all pairwise distances between the points P_I,
-   I=1,2,...,M in two dimensions, where M=N/2 and where the components of
-   P_I are X(2*I-1) and X(2*I). Thus each vector X of N variables defines
-   the M points P_I. The initial X gives equally spaced points on a
-   circle. Four different choices of the pairs (N,NPT) are tried, namely
-   (10,16), (10,21), (20,26) and (20,41). Convergence to a local minimum
-   that is not global occurs in both the N=10 cases. The details of the
-   results are highly sensitive to computer rounding errors. The choice
-   IPRINT=2 provides the current X and optimal F so far whenever RHO is
-   reduced. The bound constraints of the problem require every component of
-   X to be in the interval [-1,1]. */
-
-static void dfovec_test(const INTEGER n, const INTEGER mv,
-	const REAL *x, REAL *v_err, void* const data)
-{
-	REAL y[10][10], sum;
-	INTEGER i, j;
-
-	for (j = 0; j < n; j++) {
-		y[j][0] = 1.0;
-		y[j][1] = 2.0*x[j]-1.0;
-		for (i = 2; i <= mv; i++)
-			y[j][i] = 2.0*y[j][1]*y[j][i-1]-y[j][i-2];
-	}
-	for (i = 0; i < mv; i++) {
-		sum = 0;
-		for (j = 0; j < n; j++)
-			sum += y[j][i];
-		sum /= n;
-		if (i % 2 == 0)
-			sum += 1.0/((i+1)*(i-1));
-		v_err[i] = sum;
-	}
-} /* dfovec_test */
-
-void newuoa_h_test(void)
-{
-	const INTEGER nmax = 8, nptmax = 2*nmax+1, mmax = nmax+1,
-		nspace=(nptmax+11)*(nptmax+nmax)+nmax*(3*nmax+11)/2;
-  	REAL w[nspace], x[nmax], v_err[mmax], rhobeg, rhoend, f;
-	INTEGER i, n, npt, mv, iprint, maxfun;
-
-	iprint = 2;
-	maxfun = 5000;
-	rhoend = 1e-6;
-	for (n = 2; n <= nmax; n += 2) {
-		npt = 2*n + 1;
-		mv = n + 1;
-		for (i = 0; i < n; i++)
-			x[i] = (REAL)(i+1)/mv;
-		rhobeg = x[0]*0.2;
-		fprintf(stdout, "\n\n    Results with N =%2d and NPT =%3d\n", (int)n, (int)npt);
-		newuoa_h(n, npt, dfovec_test, NULL, x, rhobeg, rhoend, iprint, maxfun, w, mv);
-		dfovec_test(n, mv, x, v_err, NULL);
-		f = 0.0;
-		for (i=0; i<mv; i++)
-			f += v_err[i]*v_err[i];
-		fprintf(stdout, " Final function value, f_final=%25.16E\n", (double)f);
-	}
-} /* newuoa_h_test */
-
-#ifdef TESTING
-
-int
-main(int argc, char* argv[])
-{
-	newuoa_h_test();
-	return 0;
-}
-
-#endif /* TESTING */
-
 /*---------------------------------------------------------------------------*/
 /* NEWUOA_H PRIVATE FUNCTIONS */
-
-static void
-print_error(const char* reason)
-{
-	fprintf(stderr, "\n    Return from NEWUOA_H because %s.\n", reason);
-}
-
-static void
-print_x(FILE* output, INTEGER n, const REAL x[], const REAL dx[])
-{
-  INTEGER i;
-  for (i = 0; i < n; ++i) {
-    fprintf(output, "%s%15.6E%s",
-            ((i%5 == 0) ? "  " : ""),
-            (double)(dx == NULL ? x[i] : (x[i] + dx[i])),
-            ((i == n - 1 || i%5 == 4) ? "\n" : ""));
-  }
-}
-
-static void f_grad(const INTEGER mv, REAL* const v_base, REAL *v_gtemp)
-{
-    INTEGER m1;
-    for (m1 = 0; m1 < mv; m1++)
-	v_gtemp[m1] = 2*v_base[m1];
-} /* f_grad */
 
 static REAL f_value(const INTEGER mv, REAL* const v_err)
 {
@@ -169,6 +66,28 @@ static REAL f_value(const INTEGER mv, REAL* const v_err)
 		f +=  v_err[m1] * v_err[m1];
 	return f;
 } /* f_value */
+
+static void f_grad(const INTEGER mv, REAL* const v_base, REAL *v_gtemp)
+{
+	INTEGER m1;
+	for (m1 = 0; m1 < mv; m1++)
+		v_gtemp[m1] = 2*v_base[m1];
+} /* f_grad */
+
+/* Function for setting the vector HD to the vector D multiplied by the
+   second derivative matrix of Q. */
+static void symv(const INTEGER n, REAL * const hq, REAL * const d, REAL *hd) {
+	INTEGER i, ih, j;
+	for (i = 0; i < n; ++i)
+		hd[i] = 0.0;
+	ih = 0;
+	for (j = 0; j < n; ++j)
+		for (i = 0; i <= j; ++i) {
+			if (i < j) hd[j] += hq[ih] * d[i];
+			hd[i] += hq[ih] * d[j];
+			++ih;
+		}
+}
 
 /*   Important Notice: */
 /*   This TRSAPP_H are modifications and based on the subroutine TRSAPP in the software NEWUOA, authored by M.
@@ -184,49 +103,36 @@ trsapp_h(const INTEGER n, const INTEGER npt, REAL *xopt,
 	v_base, const REAL xoptsq, const INTEGER mv, LOGICAL *model_update, 
 	LOGICAL *opt_update)
 {
-    /* Local variables */
-    static LOGICAL zero_res;
-    static INTEGER i, j, k;
-    static INTEGER m1;
-    static REAL t1, t2, dd, cf, dg, gg;
-    static INTEGER ih;
-    static REAL ds, sg;
-    static INTEGER iu;
-    static REAL ss, dhd, dhs, cth, sgk, shs, sth, gbeg[100], qadd, half,
-	     qbeg, qred, qmin, temp, qsav, qnew, zero, ggbeg, alpha;
-    static LOGICAL debug;
-    static REAL angle, reduc;
-    static INTEGER iterc;
-    static REAL f_opt, delsq, ggsav, tempa, tempb, bstep;
-    static INTEGER isave;
-    static REAL ratio, twopi, gnorm2, f_base;
-    static INTEGER itersw;
-    static REAL v_gtemp[400], angtest;
-    static INTEGER itermax;
+	/* Local variables */
+	static LOGICAL zero_res, debug;
+	static INTEGER i, j, k, m1, ih, iu, isave, iterc, itersw, itermax;
+	static REAL t1, t2, dd, cf, dg, gg, ds, sg, ss, dhd, dhs, cth, sgk, shs, sth, gbeg[100], qadd, half,
+		qbeg, qred, qmin, temp, qsav, qnew, zero, ggbeg, alpha, angle, reduc, f_opt, delsq, ggsav,
+		tempa, tempb, bstep, ratio, twopi, gnorm2, f_base, v_gtemp[400], angtest;
 
-    /* Parameter adjustments */
-    xpt -= npt+1;
-    --xopt;
-    --gq;
-    --hq;
-    --pq;
-    --step;
-    --d;
-    --g;
-    --hd;
-    --hs;
-    gqv -= 401;
-    hqv -= 401;
-    pqv -= 401;
-    --xbase;
-    gqv_opt -= 401;
-    --v_opt;
-    --v_base;
+	/* Parameter adjustments */
+	xpt -= npt+1;
+	--xopt;
+	--gq;
+	--hq;
+	--pq;
+	--step;
+	--d;
+	--g;
+	--hd;
+	--hs;
+	gqv -= 401;
+	hqv -= 401;
+	pqv -= 401;
+	--xbase;
+	gqv_opt -= 401;
+	--v_opt;
+	--v_base;
 
-    /* Function Body */
-    debug = 0;
-    half = 0.5;
-    zero = 0.0;
+	/* Function Body */
+	debug = 0;
+	half = 0.5;
+	zero = 0.0;
 
 	/* Check arguments */
 	if (n > 100) {
@@ -238,154 +144,126 @@ trsapp_h(const INTEGER n, const INTEGER npt, REAL *xopt,
 		return NEWUOA_CORRUPTED;
 	}
 
-    if (! (*model_update) && ! (*opt_update)) {
-	goto L8;
-    }
-    *model_update = 0;
-    *opt_update = 0;
-    if (SQRT(xoptsq) > delta * .25) {
+	if (! (*model_update) && ! (*opt_update)) goto L8;
+	*model_update = 0;
+	*opt_update = 0;
+	if (SQRT(xoptsq) > delta * .25) {
 
-/* Use the gradient at xopt to formulate J^t J */
+		/* Use the gradient at xopt to formulate J^t J */
 	
-	for (m1 = 1; m1 <= mv; ++m1) {
-	    for (i = 1; i <= n; ++i) {
-		gqv_opt[m1 + i * 400] = gqv[m1 + i * 400];
-	    }
-	    for (k = 1; k <= npt; ++k) {
-		temp = zero;
-		for (j = 1; j <= n; ++j) {
-		    temp += xpt[k + j * npt] * xopt[j];
+		for (m1 = 1; m1 <= mv; ++m1) {
+			for (i = 1; i <= n; ++i)
+				gqv_opt[m1 + i * 400] = gqv[m1 + i * 400];
+			for (k = 1; k <= npt; ++k) {
+				temp = zero;
+				for (j = 1; j <= n; ++j)
+					temp += xpt[k + j * npt] * xopt[j];
+				temp *= pqv[m1 + k * 400];
+				for (i = 1; i <= n; ++i)
+					gqv_opt[m1 + i * 400] += temp * xpt[k + i * npt];
+			}
+			ih = 0;
+			for (j = 1; j <= n; ++j)
+				for (i = 1; i <= j; ++i) {
+					++ih;
+					if (i < j)
+						gqv_opt[m1 + j * 400] += hqv[m1 + ih * 400] * xopt[i];
+					gqv_opt[m1 + i * 400] += hqv[m1 + ih * 400] * xopt[j];
+				}
 		}
-		temp *= pqv[m1 + k * 400];
+		f_grad(mv, &v_opt[1], &v_gtemp[1]);
+		gnorm2 = zero;
 		for (i = 1; i <= n; ++i) {
-		    gqv_opt[m1 + i * 400] += temp * xpt[k + i * npt];
+			gq[i] = zero;
+			for (m1 = 1; m1 <= mv; ++m1)
+				gq[i] += v_gtemp[m1] * gqv_opt[m1 + i * 400];
+			gnorm2 += gq[i] * gq[i];
 		}
-	    }
-	    ih = 0;
-	    for (j = 1; j <= n; ++j) {
-		for (i = 1; i <= j; ++i) {
-		    ++ih;
-		    if (i < j) {
-			gqv_opt[m1 + j * 400] += hqv[m1 + ih * 400] * xopt[
-				i];
-		    }
-		    gqv_opt[m1 + i * 400] += hqv[m1 + ih * 400] * xopt[j];
-		}
-	    }
-	}
-	f_grad(mv, &v_opt[1], v_gtemp);
-	gnorm2 = zero;
-	for (i = 1; i <= n; ++i) {
-	    gq[i] = zero;
-	    for (m1 = 1; m1 <= mv; ++m1) {
-		gq[i] += v_gtemp[m1 - 1] * gqv_opt[m1 + i * 400];
-	    }
-	    gnorm2 += gq[i] * gq[i];
-	}
 
-/* Calculate the explicite Hessian. */
+		/* Calculate the explicite Hessian. */
 
-	f_opt = f_value(mv, &v_opt[1]);
-	if (gnorm2 >= 1. || f_opt <= SQRT(gnorm2)) {
-	    zero_res = 1;
-	} else {
-	    zero_res = 0;
-	}
-	ih = 0;
-	for (j = 1; j <= n; ++j) {
-	    for (i = 1; i <= j; ++i) {
-		++ih;
-		if (zero_res) {
-		    t1 = zero;
-		    for (m1 = 1; m1 <= mv; ++m1) {
-			t1 += gqv_opt[m1 + i * 400] * gqv_opt[m1 + j * 
-				400];
-		    }
-		    hq[ih] = t1 * 2.;
-		} else {
-		    t1 = zero;
-		    for (m1 = 1; m1 <= mv; ++m1) {
-			t2 = zero;
-			for (k = 1; k <= npt; ++k) {
-			    t2 += xpt[k + i * npt] * pqv[m1 + k * 400] 
-				    * xpt[k + j * npt];
+		f_opt = f_value(mv, &v_opt[1]);
+		if (gnorm2 >= 1. || f_opt <= SQRT(gnorm2)) zero_res = 1;
+		else zero_res = 0;
+		ih = 0;
+		for (j = 1; j <= n; ++j) {
+			for (i = 1; i <= j; ++i) {
+				++ih;
+				if (zero_res) {
+					t1 = zero;
+					for (m1 = 1; m1 <= mv; ++m1)
+						t1 += gqv_opt[m1 + i * 400] * gqv_opt[m1 + j * 400];
+					hq[ih] = t1 * 2.;
+				} else {
+					t1 = zero;
+					for (m1 = 1; m1 <= mv; ++m1) {
+						t2 = zero;
+						for (k = 1; k <= npt; ++k)
+							t2 += xpt[k + i * npt] * pqv[m1 + k * 400] * xpt[k + j * npt];
+						t2 += hqv[m1 + ih * 400];
+						t1 += gqv_opt[m1 + i * 400] * gqv_opt[m1 + j * 400] + v_opt[m1] * t2;
+					}
+					hq[ih] = t1 * 2.;
+				}
 			}
-			t2 += hqv[m1 + ih * 400];
-			t1 += gqv_opt[m1 + i * 400] * gqv_opt[m1 + j * 
-				400] + v_opt[m1] * t2;
-		    }
-		    hq[ih] = t1 * 2.;
 		}
-	    }
-	}
-    } else {
-
-/* Use the gradient at xbase to formulate J^t J */
-
-	f_grad(mv, &v_base[1], v_gtemp);
-	gnorm2 = zero;
-	for (i = 1; i <= n; ++i) {
-	    gq[i] = zero;
-	    for (m1 = 1; m1 <= mv; ++m1) {
-		gq[i] += v_gtemp[m1 - 1] * gqv[m1 + i * 400];
-	    }
-	    gnorm2 += gq[i] * gq[i];
-	}
-
-/* Calculate the explicite Hessian. */
-
-	f_base = f_value(mv, &v_base[1]);
-	if (gnorm2 >= 1. || f_base <= SQRT(gnorm2)) {
-	    zero_res = 1;
 	} else {
-	    zero_res = 0;
-	}
-	ih = 0;
-	for (j = 1; j <= n; ++j) {
-	    for (i = 1; i <= j; ++i) {
-		++ih;
-		if (zero_res) {
-		    t1 = zero;
-		    for (m1 = 1; m1 <= mv; ++m1) {
-			t1 += gqv[m1 + i * 400] * gqv[m1 + j * 400];
-		    }
-		    hq[ih] = t1 * 2.;
-		} else {
-		    t1 = zero;
-		    for (m1 = 1; m1 <= mv; ++m1) {
-			t2 = zero;
-			for (k = 1; k <= npt; ++k) {
-			    t2 += xpt[k + i * npt] * pqv[m1 + k * 400] 
-				    * xpt[k + j * npt];
+
+		/* Use the gradient at xbase to formulate J^t J */
+
+		f_grad(mv, &v_base[1], &v_gtemp[1]);
+		gnorm2 = zero;
+		for (i = 1; i <= n; ++i) {
+			gq[i] = zero;
+			for (m1 = 1; m1 <= mv; ++m1)
+				gq[i] += v_gtemp[m1] * gqv[m1 + i * 400];
+			gnorm2 += gq[i] * gq[i];
+		}
+
+		/* Calculate the explicite Hessian. */
+
+		f_base = f_value(mv, &v_base[1]);
+		if (gnorm2 >= 1. || f_base <= SQRT(gnorm2)) zero_res = 1;
+		else zero_res = 0;
+		ih = 0;
+		for (j = 1; j <= n; ++j)
+			for (i = 1; i <= j; ++i) {
+				++ih;
+				if (zero_res) {
+					t1 = zero;
+					for (m1 = 1; m1 <= mv; ++m1)
+						t1 += gqv[m1 + i * 400] * gqv[m1 + j * 400];
+					hq[ih] = t1 * 2.;
+				} else {
+					t1 = zero;
+					for (m1 = 1; m1 <= mv; ++m1) {
+						t2 = zero;
+						for (k = 1; k <= npt; ++k)
+							t2 += xpt[k + i * npt] * pqv[m1 + k * 400] * xpt[k + j * npt];
+						t2 += hqv[m1 + ih * 400];
+						t1 += gqv[m1 + i * 400] * gqv[m1 + j * 400] + v_base[m1] * t2;
+					}
+					hq[ih] = t1 * 2.;
+				}
 			}
-			t2 += hqv[m1 + ih * 400];
-			t1 += gqv[m1 + i * 400] * gqv[m1 + j * 400] + 
-				v_base[m1] * t2;
-		    }
-		    hq[ih] = t1 * 2.;
-		}
-	    }
+	
+		/* calculte the gradient at xopt */
+		ih = 0;
+		for (j = 1; j <= n; ++j)
+			for (i = 1; i <= j; ++i) {
+				++ih;
+				if (i < j) gq[j] += hq[ih] * xopt[i];
+				gq[i] += hq[ih] * xopt[j];
+			}
 	}
-/* calculte the gradient at xopt */
-	ih = 0;
-	for (j = 1; j <= n; ++j) {
-	    for (i = 1; i <= j; ++i) {
-		++ih;
-		if (i < j) {
-		    gq[j] += hq[ih] * xopt[i];
-		}
-		gq[i] += hq[ih] * xopt[j];
-	    }
-	}
-    }
 L8:
-    half = .5;
-    zero = 0.;
-    twopi = ATAN(1.) * 8.;
-    delsq = delta * delta;
-    iterc = 0;
-    itermax = n;
-    itersw = itermax;
+	half = .5;
+	zero = 0.;
+	twopi = ATAN(1.) * 8.;
+	delsq = delta * delta;
+	iterc = 0;
+	itermax = n;
+	itersw = itermax;
 	if (debug) {
 		REAL t = zero;
 		for (i = 1; i <= n; ++i)
@@ -396,264 +274,186 @@ L8:
 	for (i = 1; i <= n; ++i) {
 		gnorm2 += gq[i] * gq[i];
 		d[i] = zero;
+		hd[i] = zero;
 	}
 	gnorm2 = SQRT(gnorm2);
 	if (debug) fprintf(stdout, " gnorm2=%25.15E\n", (double)gnorm2);
-    goto L170;
 
-/*     Prepare for the first line search. */
-
-L20:
-    qred = zero;
-    dd = zero;
-    for (i = 1; i <= n; ++i) {
-	step[i] = zero;
-	hs[i] = zero;
-	g[i] = gq[i];
-	d[i] = -g[i];
-	gbeg[i - 1] = g[i];
-	dd += d[i] * d[i];
-    }
-    *crvmin = zero;
-    if (dd == zero) {
-	goto L160;
-    }
-    ds = zero;
-    ss = zero;
-    gg = dd;
-    ggbeg = gg;
-    if (debug) fprintf(stdout, " GGBEG=%25.15E\n", ggbeg);
-
-/*     Calculate the step to the trust region boundary and the product HD. */
-
-L40:
-    ++iterc;
-    temp = delsq - ss;
-    bstep = temp / (ds + SQRT(ds * ds + dd * temp));
-/*      BSTEP=(-DS+DSQRT(DS*DS+DD*TEMP))/DD */
-    if (debug) fprintf(stdout, " BSTEP=%25.15E\n", bstep);
-    goto L170;
-L50:
-    dhd = zero;
-    for (j = 1; j <= n; ++j) {
-/* L60: */
-	dhd += d[j] * hd[j];
-    }
-
-/*     Update CRVMIN and set the step-length ALPHA. */
-
-    alpha = bstep;
-    if (debug) fprintf(stdout, " ITERC=%6ld\n DHD/DD=%25.15E\n", (long)iterc, (double)(dhd/dd));
-    if (dhd > zero) {
-	temp = dhd / dd;
-	if (iterc == 1) {
-	    *crvmin = temp;
-	}
-	*crvmin = MIN(*crvmin, temp);
-	alpha = MIN(alpha, gg/dhd);
-    }
-    qadd = alpha * (gg - half * alpha * dhd);
-    qred += qadd;
-
-/*     Update STEP and HS. */
-
-    ggsav = gg;
-    gg = zero;
-    for (i = 1; i <= n; ++i) {
-	step[i] += alpha * d[i];
-	hs[i] += alpha * hd[i];
-	temp = g[i] + hs[i];
-	gg += temp * temp;
-    }
-    if (debug) fprintf(stdout, " GG=%25.15E\n", (double)gg);
-    if (gg <= MIN(1e-4*ggbeg, 1e-16)) goto L160;
-    if (gg <= 1e-14*gnorm2) goto L160;
-    if (iterc == itermax) goto L160;
-
-/*     Begin another conjugate direction iteration if required. */
-
-    if (alpha < bstep) {
-	if (qadd <= qred * 1e-6) {
-	    goto L160;
-	}
-	temp = gg / ggsav;
+	/* Prepare for the first line search. */
+	qred = zero;
 	dd = zero;
+	for (i = 1; i <= n; ++i) {
+		step[i] = zero;
+		hs[i] = zero;
+		g[i] = gq[i];
+		d[i] = -g[i];
+		gbeg[i - 1] = g[i];
+		dd += d[i] * d[i];
+	}
+	*crvmin = zero;
+	if (dd == zero) goto L160;
 	ds = zero;
 	ss = zero;
+	gg = dd;
+	ggbeg = gg;
+	if (debug) fprintf(stdout, " GGBEG=%25.15E\n", ggbeg);
+
+	/* Calculate the step to the trust region boundary and the product HD. */
+
+L40:
+	++iterc;
+	temp = delsq - ss;
+	bstep = temp / (ds + SQRT(ds * ds + dd * temp));
+	/* BSTEP=(-DS+DSQRT(DS*DS+DD*TEMP))/DD */
+	if (debug) fprintf(stdout, " BSTEP=%25.15E\n", bstep);
+	symv(n,&hq[1],&d[1],&hd[1]);
+	if (iterc>itersw) goto L120;
+	dhd = zero;
+	for (j = 1; j <= n; ++j)
+		dhd += d[j] * hd[j];
+
+	/* Update CRVMIN and set the step-length ALPHA. */
+
+	alpha = bstep;
+	if (debug) fprintf(stdout, " ITERC=%6ld\n DHD/DD=%25.15E\n", (long)iterc, (double)(dhd/dd));
+	if (dhd > zero) {
+		temp = dhd / dd;
+		if (iterc == 1) *crvmin = temp;
+		*crvmin = MIN(*crvmin, temp);
+		alpha = MIN(alpha, gg/dhd);
+	}
+	qadd = alpha * (gg - half * alpha * dhd);
+	qred += qadd;
+
+	/* Update STEP and HS. */
+
+	ggsav = gg;
+	gg = zero;
 	for (i = 1; i <= n; ++i) {
-	    d[i] = temp * d[i] - g[i] - hs[i];
-	    dd += d[i] * d[i];
-	    ds += d[i] * step[i];
-	    ss += step[i] * step[i];
+		step[i] += alpha * d[i];
+		hs[i] += alpha * hd[i];
+		temp = g[i] + hs[i];
+		gg += temp * temp;
 	}
-	if (ss < delsq) {
-	    goto L40;
+	if (debug) fprintf(stdout, " GG=%25.15E\n", (double)gg);
+	if (gg <= MIN(1e-4*ggbeg, 1e-16)) goto L160;
+	if (gg <= 1e-14*gnorm2) goto L160;
+	if (iterc == itermax) goto L160;
+
+	/* Begin another conjugate direction iteration if required. */
+
+	if (alpha < bstep) {
+		if (qadd <= qred * 1e-6) goto L160;
+		temp = gg / ggsav;
+		dd = zero;
+		ds = zero;
+		ss = zero;
+		for (i = 1; i <= n; ++i) {
+			d[i] = temp * d[i] - g[i] - hs[i];
+			dd += d[i] * d[i];
+			ds += d[i] * step[i];
+			ss += step[i] * step[i];
+		}
+		if (ss < delsq) goto L40;
 	}
-    }
-    *crvmin = zero;
-    itersw = iterc;
+	*crvmin = zero;
+	itersw = iterc;
 
-/*     Test whether an alternative iteration is required. */
-
+	/* Test whether an alternative iteration is required. */
 L90:
-    if (gg <= ggbeg * 1e-4) {
-	goto L160;
-    }
-    if (debug) fprintf(stdout, "curve search performed\n");
-    sg = zero;
-    shs = zero;
-    for (i = 1; i <= n; ++i) {
-	sg += step[i] * g[i];
-/* L100: */
-	shs += step[i] * hs[i];
-    }
-    sgk = sg + shs;
-    angtest = sgk / SQRT(gg * delsq);
-    if (angtest <= -.99) {
-	goto L160;
-    }
+	if (gg <= ggbeg * 1e-4) goto L160;
+	if (debug) fprintf(stdout, "curve search performed\n");
+	sg = zero;
+	shs = zero;
+	for (i = 1; i <= n; ++i) {
+		sg += step[i] * g[i];
+		shs += step[i] * hs[i];
+	}
+	sgk = sg + shs;
+	angtest = sgk / SQRT(gg * delsq);
+	if (angtest <= -.99) goto L160;
 
-/*     Begin the alternative iteration by calculating D and HD and some */
-/*     scalar products. */
-
-    ++iterc;
-    temp = SQRT(delsq * gg - sgk * sgk);
-    tempa = delsq / temp;
-    tempb = sgk / temp;
-    for (i = 1; i <= n; ++i) {
-/* L110: */
-	d[i] = tempa * (g[i] + hs[i]) - tempb * step[i];
-    }
-    goto L170;
+	/* Begin the alternative iteration by calculating D and HD and some
+	   scalar products. */
+	++iterc;
+	temp = SQRT(delsq * gg - sgk * sgk);
+	tempa = delsq / temp;
+	tempb = sgk / temp;
+	for (i = 1; i <= n; ++i)
+		d[i] = tempa * (g[i] + hs[i]) - tempb * step[i];
+	symv(n,&hq[1],&d[1],&hd[1]);
 L120:
-    dg = zero;
-    dhd = zero;
-    dhs = zero;
-    for (i = 1; i <= n; ++i) {
-	dg += d[i] * g[i];
-	dhd += hd[i] * d[i];
-/* L130: */
-	dhs += hd[i] * step[i];
-    }
+	dg = zero;
+	dhd = zero;
+	dhs = zero;
+	for (i = 1; i <= n; ++i) {
+		dg += d[i] * g[i];
+		dhd += hd[i] * d[i];
+		dhs += hd[i] * step[i];
+	}
 
-/*     Seek the value of the angle that minimizes Q. */
+	/* Seek the value of the angle that minimizes Q. */
 
-    cf = half * (shs - dhd);
-    qbeg = sg + cf;
-    qsav = qbeg;
-    qmin = qbeg;
-    isave = 0;
-    iu = 49;
-    temp = twopi / (REAL) (iu + 1);
-    for (i = 1; i <= iu; ++i) {
-	angle = (REAL) i * temp;
+	cf = half * (shs - dhd);
+	qbeg = sg + cf;
+	qsav = qbeg;
+	qmin = qbeg;
+	isave = 0;
+	iu = 49;
+	temp = twopi / (REAL) (iu + 1);
+	for (i = 1; i <= iu; ++i) {
+		angle = (REAL) i * temp;
+		cth = COS(angle);
+		sth = SIN(angle);
+		qnew = (sg + cf * cth) * cth + (dg + dhs * cth) * sth;
+		if (qnew < qmin) {
+			qmin = qnew;
+			isave = i;
+			tempa = qsav;
+		} else if (i == isave + 1)
+			tempb = qnew;
+		qsav = qnew;
+	}
+	if (isave == 0) tempa = qnew;
+	if (isave == iu) tempb = qbeg;
+	angle = zero;
+	if (tempa != tempb) {
+		tempa -= qmin;
+		tempb -= qmin;
+		angle = half * (tempa - tempb) / (tempa + tempb);
+	}
+	angle = temp * ((REAL) isave + angle);
+
+	/* Calculate the new STEP and HS. Then test for convergence. */
+
 	cth = COS(angle);
 	sth = SIN(angle);
-	qnew = (sg + cf * cth) * cth + (dg + dhs * cth) * sth;
-	if (qnew < qmin) {
-	    qmin = qnew;
-	    isave = i;
-	    tempa = qsav;
-	} else if (i == isave + 1) {
-	    tempb = qnew;
+	reduc = qbeg - (sg + cf * cth) * cth - (dg + dhs * cth) * sth;
+	gg = zero;
+	for (i = 1; i <= n; ++i) {
+		step[i] = cth * step[i] + sth * d[i];
+		hs[i] = cth * hs[i] + sth * hd[i];
+		temp = g[i] + hs[i];
+		gg += temp * temp;
 	}
-/* L140: */
-	qsav = qnew;
-    }
-    if ((REAL) isave == zero) {
-	tempa = qnew;
-    }
-    if (isave == iu) {
-	tempb = qbeg;
-    }
-    angle = zero;
-    if (tempa != tempb) {
-	tempa -= qmin;
-	tempb -= qmin;
-	angle = half * (tempa - tempb) / (tempa + tempb);
-    }
-    angle = temp * ((REAL) isave + angle);
-
-/*     Calculate the new STEP and HS. Then test for convergence. */
-
-    cth = COS(angle);
-    sth = SIN(angle);
-    reduc = qbeg - (sg + cf * cth) * cth - (dg + dhs * cth) * sth;
-    gg = zero;
-    for (i = 1; i <= n; ++i) {
-	step[i] = cth * step[i] + sth * d[i];
-	hs[i] = cth * hs[i] + sth * hd[i];
-	temp = g[i] + hs[i];
-	gg += temp * temp;
-    }
-    qred += reduc;
-    ratio = reduc / qred;
-    if (iterc < itermax && ratio > .01) {
-	goto L90;
-    }
+	qred += reduc;
+	ratio = reduc / qred;
+	if (iterc < itermax && ratio > .01) goto L90;
 L160:
-    for (i = 1; i <= n; ++i) {
-	hd[i] = zero;
-/* L161: */
-    }
-    ih = 0;
-    for (j = 1; j <= n; ++j) {
-	for (i = 1; i <= j; ++i) {
-	    ++ih;
-	    if (i < j) {
-		hd[j] += hq[ih] * step[i];
-	    }
-/* L162: */
-	    hd[i] += hq[ih] * step[j];
-	}
-    }
-/*      vquad = zero */
-/*      do 163 i=1,n */
-/*  163 vquad = vquad + step(i)*(GQ(i)+HALF*HD(i)) */
-/*     &        + XOPT(i)*HD(i) */
-    *vquad = zero;
-    for (i = 1; i <= n; ++i) {
-/* L163: */
-	*vquad += step[i] * (gbeg[i - 1] + half * hd[i]);
-    }
-    if (*vquad > zero) {
-        fprintf(stdout, " Warning: the TR subproblem was not well solved!\n");
-	REAL t = zero;
+	symv(n,&hq[1],&step[1],&hd[1]);
+	*vquad = zero;
 	for (i = 1; i <= n; ++i)
-	    t += step[i] * step[i];
-	fprintf(stdout, " vquad=%25.15E Stepsize=%25.15E\n", (double)*vquad, (double)SQRT(t));
-	if (SQRT(t) >= half * delta) return -100;
-    }
-    return 0;
-
-/*     The following instructions act as a subroutine for setting the vector */
-/*     HD to the vector D multiplied by the second derivative matrix of Q. */
-/*     They are called from three different places, which are distinguished */
-/*     by the value of ITERC. */
-
-L170:
-    for (i = 1; i <= n; ++i) {
-/* L315: */
-	hd[i] = zero;
-    }
-    ih = 0;
-    for (j = 1; j <= n; ++j) {
-	for (i = 1; i <= j; ++i) {
-	    ++ih;
-	    if (i < j) {
-		hd[j] += hq[ih] * d[i];
-	    }
-/* L320: */
-	    hd[i] += hq[ih] * d[j];
+		*vquad += step[i] * (gbeg[i - 1] + half * hd[i]);
+		// *vquad += step[i]*(gq[i] + half * hd[i]) + xopt[i]*hd[i]
+	if (*vquad > zero) {
+		fprintf(stdout, " Warning: the TR subproblem was not well solved!\n");
+		REAL t = zero;
+		for (i = 1; i <= n; ++i)
+			t += step[i] * step[i];
+		fprintf(stdout, " vquad=%25.15E Stepsize=%25.15E\n", (double)*vquad, (double)SQRT(t));
+		if (SQRT(t) >= half * delta) return -100;
 	}
-    }
-    if (iterc == 0) {
-	goto L20;
-    }
-    if (iterc <= itersw) {
-	goto L50;
-    }
-    goto L120;
+	return 0;
 } /* trsapp_h */
 
 /*   Important Notice: */
@@ -1558,6 +1358,24 @@ update(const INTEGER n, const INTEGER npt, REAL *bmat,
     return;
 } /* update */
 
+static void
+print_error(const char* reason)
+{
+	fprintf(stderr, "\n    Return from NEWUOA_H because %s.\n", reason);
+}
+
+static void
+print_x(FILE* output, INTEGER n, const REAL x[], const REAL dx[])
+{
+  INTEGER i;
+  for (i = 0; i < n; ++i) {
+    fprintf(output, "%s%15.6E%s",
+            ((i%5 == 0) ? "  " : ""),
+            (double)(dx == NULL ? x[i] : (x[i] + dx[i])),
+            ((i == n - 1 || i%5 == 4) ? "\n" : ""));
+  }
+}
+
 /*   Important Notice: */
 /*   This NEWUOB_H are modifications and based on the subroutine NEWUOB in the software NEWUOA, authored by M.
  J. D. Powell. */
@@ -2449,5 +2267,83 @@ const char* newuoa_reason(int status)
 		return "unknown status";
 	}
 }
+
+/*---------------------------------------------------------------------------
+   TESTING
+   The Chebyquad test problem (Fletcher, 1965) for N = 2,4,6 and 8,
+   with NPT = 2N+1.
+
+   Test problem for NEWUOA,FIXME: the objective function being the sum of the
+   reciprocals of all pairwise distances between the points P_I,
+   I=1,2,...,M in two dimensions, where M=N/2 and where the components of
+   P_I are X(2*I-1) and X(2*I). Thus each vector X of N variables defines
+   the M points P_I. The initial X gives equally spaced points on a
+   circle. Four different choices of the pairs (N,NPT) are tried, namely
+   (10,16), (10,21), (20,26) and (20,41). Convergence to a local minimum
+   that is not global occurs in both the N=10 cases. The details of the
+   results are highly sensitive to computer rounding errors. The choice
+   IPRINT=2 provides the current X and optimal F so far whenever RHO is
+   reduced. The bound constraints of the problem require every component of
+   X to be in the interval [-1,1]. */
+
+static void dfovec_test(const INTEGER n, const INTEGER mv,
+	const REAL *x, REAL *v_err, void* const data)
+{
+	REAL y[10][10], sum;
+	INTEGER i, j;
+
+	for (j = 0; j < n; j++) {
+		y[j][0] = 1.0;
+		y[j][1] = 2.0*x[j]-1.0;
+		for (i = 2; i <= mv; i++)
+			y[j][i] = 2.0*y[j][1]*y[j][i-1]-y[j][i-2];
+	}
+	for (i = 0; i < mv; i++) {
+		sum = 0;
+		for (j = 0; j < n; j++)
+			sum += y[j][i];
+		sum /= n;
+		if (i % 2 == 0)
+			sum += 1.0/((i+1)*(i-1));
+		v_err[i] = sum;
+	}
+} /* dfovec_test */
+
+void newuoa_h_test(void)
+{
+	const INTEGER nmax = 8, nptmax = 2*nmax+1, mmax = nmax+1,
+		nspace=(nptmax+11)*(nptmax+nmax)+nmax*(3*nmax+11)/2;
+  	REAL w[nspace], x[nmax], v_err[mmax], rhobeg, rhoend, f;
+	INTEGER i, n, npt, mv, iprint, maxfun;
+
+	iprint = 2;
+	maxfun = 5000;
+	rhoend = 1e-6;
+	for (n = 2; n <= nmax; n += 2) {
+		npt = 2*n + 1;
+		mv = n + 1;
+		for (i = 0; i < n; i++)
+			x[i] = (REAL)(i+1)/mv;
+		rhobeg = x[0]*0.2;
+		fprintf(stdout, "\n\n    Results with N =%2d and NPT =%3d\n", (int)n, (int)npt);
+		newuoa_h(n, npt, dfovec_test, NULL, x, rhobeg, rhoend, iprint, maxfun, w, mv);
+		dfovec_test(n, mv, x, v_err, NULL);
+		f = 0.0;
+		for (i=0; i<mv; i++)
+			f += v_err[i]*v_err[i];
+		fprintf(stdout, " Final function value, f_final=%25.16E\n", (double)f);
+	}
+} /* newuoa_h_test */
+
+#ifdef TESTING
+
+int
+main(int argc, char* argv[])
+{
+	newuoa_h_test();
+	return 0;
+}
+
+#endif /* TESTING */
 
 /*---------------------------------------------------------------------------*/
