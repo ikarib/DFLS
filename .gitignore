@@ -1,0 +1,5 @@
+# Output of tests.
+*.out
+*.diff
+newuoa_h-orig
+newuoa_h-test
