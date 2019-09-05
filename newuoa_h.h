@@ -53,8 +53,8 @@ extern "C" {
    MV is the number of computed values of the vector function V_ERR.
    DATA is anything else needed by the objective function.
    Here: N, MV, X \in R^N and DATA are input, V_ERR \in R^{MV} are output. */
-typedef void newuoa_dfovec(const INTEGER n, const INTEGER mv, const REAL *x,
-	REAL *v_err, void* const data);
+typedef void newuoa_dfovec(const INTEGER n, const INTEGER mv, const REAL* x,
+	REAL* v_err, const void* data);
 
 /* This subroutine seeks the least value of a function of many variables, by
    a trust region method that forms quadratic models by interpolation.  There
@@ -104,7 +104,7 @@ typedef void newuoa_dfovec(const INTEGER n, const INTEGER mv, const REAL *x,
    The returned value should be NEWUOA_SUCCESS, but a different value can be
    returned upon error (see `newuoa_reason` for an explanatory message). */
 extern int newuoa_h(const INTEGER n, const INTEGER npt,
-		newuoa_dfovec* dfovec, void* const data,
+		newuoa_dfovec* dfovec, const void* data,
 		REAL* x, const REAL rhobeg, const REAL rhoend,
 		const INTEGER iprint, const INTEGER maxfun,
 		REAL* w, const INTEGER mv);
