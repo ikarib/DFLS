@@ -1241,6 +1241,7 @@ static int newuob_h(const INTEGER n, const INTEGER npt, newuoa_dfovec* dfovec,
 	knew = 0;
 	kopt = 0;
 	nfsav = 0;
+	iteropt = 0;
 	alpha = zero;
 	crvmin = zero;
 	delta = zero;
