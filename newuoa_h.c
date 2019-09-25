@@ -129,7 +129,7 @@ trsapp_h(const INTEGER n, const INTEGER npt, REAL* xopt,
 	REAL alpha, angle, angtest, bstep, cf, cth, dd, dg, dhd, dhs, ds,
 		f_base, f_opt, gg, ggbeg, ggsav, gnorm2, qadd, qbeg, qmin,
 		qnew, qred, qsav, ratio, reduc, sg, sgk, shs, ss, sth, t1, t2,
-		temp, tempa, tempb, gbeg[100], v_gtemp[400];
+		temp, tempa, tempb, gbeg[n], v_gtemp[mv];
 	INTEGER i, ih, isave, iterc, itermax, itersw, iu, j, k, m1;
 	LOGICAL zero_res;
 
@@ -144,11 +144,11 @@ trsapp_h(const INTEGER n, const INTEGER npt, REAL* xopt,
 	--g;
 	--hd;
 	--hs;
-	gqv -= 401;
-	hqv -= 401;
-	pqv -= 401;
+	gqv -= mv + 1;
+	hqv -= mv + 1;
+	pqv -= mv + 1;
 	--xbase;
-	gqv_opt -= 401;
+	gqv_opt -= mv + 1;
 	--v_opt;
 	--v_base;
 
@@ -158,16 +158,6 @@ trsapp_h(const INTEGER n, const INTEGER npt, REAL* xopt,
 	shs = zero;
 	sg = zero;
 
-	/* Check arguments */
-	if (n > 100) {
-		fprintf(stderr,"in trsapp_h increase the dimension nmax to be at least %d.\n", (int)n);
-		return NEWUOA_CORRUPTED;
-	}
-	if (mv > 400) {
-		fprintf(stderr,"in trsapp_h increase the dimension mmax to be at least %d.\n", (int)mv);
-		return NEWUOA_CORRUPTED;
-	}
-
 	if (! (*model_update) && ! (*opt_update)) goto L8;
 	*model_update = 0;
 	*opt_update = 0;
@@ -176,23 +166,23 @@ trsapp_h(const INTEGER n, const INTEGER npt, REAL* xopt,
 		/* Use the gradient at xopt to formulate J^t J */
 		for (m1 = 1; m1 <= mv; ++m1) {
 			for (i = 1; i <= n; ++i)
-				gqv_opt[m1 + i * 400] = gqv[m1 + i * 400];
+				gqv_opt[m1 + i * mv] = gqv[m1 + i * mv];
 			for (k = 1; k <= npt; ++k) {
 				temp = zero;
 				for (j = 1; j <= n; ++j)
 					temp += xpt[k + j * npt] * xopt[j];
-				temp *= pqv[m1 + k * 400];
+				temp *= pqv[m1 + k * mv];
 				for (i = 1; i <= n; ++i)
-					gqv_opt[m1 + i * 400] += temp * xpt[k + i * npt];
+					gqv_opt[m1 + i * mv] += temp * xpt[k + i * npt];
 			}
-			symv(n,one,&hqv[m1+400],400,&xopt[1],1,one,&gqv_opt[m1+400],400);
+			symv(n,one,&hqv[m1+mv],mv,&xopt[1],1,one,&gqv_opt[m1+mv],mv);
 		}
 		f_grad(mv, &v_opt[1], &v_gtemp[1]);
 		gnorm2 = zero;
 		for (i = 1; i <= n; ++i) {
 			gq[i] = zero;
 			for (m1 = 1; m1 <= mv; ++m1)
-				gq[i] += v_gtemp[m1] * gqv_opt[m1 + i * 400];
+				gq[i] += v_gtemp[m1] * gqv_opt[m1 + i * mv];
 			gnorm2 += gq[i] * gq[i];
 		}
 
@@ -207,16 +197,16 @@ trsapp_h(const INTEGER n, const INTEGER npt, REAL* xopt,
 				if (zero_res) {
 					t1 = zero;
 					for (m1 = 1; m1 <= mv; ++m1)
-						t1 += gqv_opt[m1 + i * 400] * gqv_opt[m1 + j * 400];
+						t1 += gqv_opt[m1 + i * mv] * gqv_opt[m1 + j * mv];
 					hq[ih] = t1 * 2.;
 				} else {
 					t1 = zero;
 					for (m1 = 1; m1 <= mv; ++m1) {
 						t2 = zero;
 						for (k = 1; k <= npt; ++k)
-							t2 += xpt[k + i * npt] * pqv[m1 + k * 400] * xpt[k + j * npt];
-						t2 += hqv[m1 + ih * 400];
-						t1 += gqv_opt[m1 + i * 400] * gqv_opt[m1 + j * 400] + v_opt[m1] * t2;
+							t2 += xpt[k + i * npt] * pqv[m1 + k * mv] * xpt[k + j * npt];
+						t2 += hqv[m1 + ih * mv];
+						t1 += gqv_opt[m1 + i * mv] * gqv_opt[m1 + j * mv] + v_opt[m1] * t2;
 					}
 					hq[ih] = t1 * 2.;
 				}
@@ -230,7 +220,7 @@ trsapp_h(const INTEGER n, const INTEGER npt, REAL* xopt,
 		for (i = 1; i <= n; ++i) {
 			gq[i] = zero;
 			for (m1 = 1; m1 <= mv; ++m1)
-				gq[i] += v_gtemp[m1] * gqv[m1 + i * 400];
+				gq[i] += v_gtemp[m1] * gqv[m1 + i * mv];
 			gnorm2 += gq[i] * gq[i];
 		}
 
@@ -245,16 +235,16 @@ trsapp_h(const INTEGER n, const INTEGER npt, REAL* xopt,
 				if (zero_res) {
 					t1 = zero;
 					for (m1 = 1; m1 <= mv; ++m1)
-						t1 += gqv[m1 + i * 400] * gqv[m1 + j * 400];
+						t1 += gqv[m1 + i * mv] * gqv[m1 + j * mv];
 					hq[ih] = t1 * 2.;
 				} else {
 					t1 = zero;
 					for (m1 = 1; m1 <= mv; ++m1) {
 						t2 = zero;
 						for (k = 1; k <= npt; ++k)
-							t2 += xpt[k + i * npt] * pqv[m1 + k * 400] * xpt[k + j * npt];
-						t2 += hqv[m1 + ih * 400];
-						t1 += gqv[m1 + i * 400] * gqv[m1 + j * 400] + v_base[m1] * t2;
+							t2 += xpt[k + i * npt] * pqv[m1 + k * mv] * xpt[k + j * npt];
+						t2 += hqv[m1 + ih * mv];
+						t1 += gqv[m1 + i * mv] * gqv[m1 + j * mv] + v_base[m1] * t2;
 					}
 					hq[ih] = t1 * 2.;
 				}
@@ -1206,13 +1196,9 @@ static int newuob_h(const INTEGER n, const INTEGER npt, newuoa_dfovec* dfovec,
 	/* Local variables */
 	REAL alpha, beta, crvmin, delta, diff, diffa, diffb, diffc, dnorm, dsq,
 		dstep, f, fbeg, fopt, ratio, reciq, rho, rhosq, vquad1, xoptsq,
-		diffv[400], v_beg[400], v_err[400], v_opt[400], v_base[400],
-		v_temp[400], v_vquad[400],
-		wv[40000]	/* was [400][100] */,
-		gqv[40000]	/* was [400][100] */,
-		hqv[2020000]	/* was [400][5050] */,
-		pqv[80400]	/* was [400][201] */,
-		gqv_opt[40000]	/* was [400][100] */;
+		diffv[mv], v_beg[mv], v_err[mv], v_opt[mv], v_base[mv],
+		v_temp[mv], v_vquad[mv], wv[mv*n], gqv[mv*n], hqv[mv*n*(n+1)/2],
+		pqv[mv*npt], gqv_opt[mv*n];
 	INTEGER idz, ih, ip, iteropt, knew, kopt, ksave, m1, nf, nfm, nfmm, nfsav;
 	LOGICAL model_update = 1, opt_update = 1;
 	int status;
@@ -1258,16 +1244,6 @@ static int newuob_h(const INTEGER n, const INTEGER npt, newuoa_dfovec* dfovec,
 	vquad1 = zero;
 	xoptsq = zero;
 
-	/* Check arguments */
-	if (n > 100) {
-		fprintf(stderr,"in newuob_h increase the dimension nmax to be at least %d.\n", (int)n);
-		return NEWUOA_CORRUPTED;
-	}
-	if (mv > 400) {
-		fprintf(stderr,"in newuob_h increase the dimension mmax to be at least %d.\n", (int)mv);
-		return NEWUOA_CORRUPTED;
-	}
-
 	/* Set the initial elements of XPT, BMAT, HQ, PQ and ZMAT to zero. */
 	for (j = 1; j <= n; ++j) {
 		xbase[j] = x[j];
@@ -1278,12 +1254,12 @@ static int newuob_h(const INTEGER n, const INTEGER npt, newuoa_dfovec* dfovec,
 	}
 	for (j = 1; j <= n * np / 2; ++j) {
 		for (m1 = 1; m1 <= mv; ++m1)
-			hqv[m1 + j * 400 - 401] = zero;
+			hqv[m1 + j * mv - mv - 1] = zero;
 		hq[j] = zero;
 	}
 	for (k = 1; k <= npt; ++k) {
 		for (m1 = 1; m1 <= mv; ++m1)
-			pqv[m1 + k * 400 - 401] = zero;
+			pqv[m1 + k * mv - mv - 1] = zero;
 		pq[k] = zero;
 		for (j = 1; j <= nptm; ++j)
 			zmat[k + j * npt] = zero;
@@ -1337,7 +1313,7 @@ L70:
 	if (nfm <= 2*n) {
 		if (nfm >= 1 && nfm <= n) {
 			for (m1 = 1; m1 <= mv; ++m1)
-				gqv[m1 + nfm * 400 - 401] = (v_err[m1-1]-v_beg[m1-1])/rhobeg;
+				gqv[m1 + nfm * mv - mv - 1] = (v_err[m1-1]-v_beg[m1-1])/rhobeg;
 			if (npt < nf + n) {
 				bmat[nfm * ndim + 1] = -one / rhobeg;
 				bmat[nf + nfm * ndim] = one / rhobeg;
@@ -1352,8 +1328,8 @@ L70:
 			ih = nfmm * (nfmm + 1) / 2;
 			for (m1 = 1; m1 <= mv; ++m1) {
 				temp = (v_beg[m1-1]-v_err[m1-1])/rhobeg;
-				hqv[m1 + ih * 400 - 401] = (gqv[m1 + nfmm * 400 - 401] - temp)/rhobeg;
-				gqv[m1 + nfmm * 400 - 401] = half * (gqv[m1 + nfmm * 400 - 401] + temp);
+				hqv[m1 + ih * mv - mv - 1] = (gqv[m1 + nfmm * mv - mv - 1] - temp)/rhobeg;
+				gqv[m1 + nfmm * mv - mv - 1] = half * (gqv[m1 + nfmm * mv - mv - 1] + temp);
 			}
 		}
 	}
@@ -1415,12 +1391,12 @@ L120:
 			for (i = 1; i <= n; ++i)
 				sum += xpt[k + i * npt] * xopt[i];
 			for (m1 = 1; m1 <= mv; ++m1)
-				v_temp[m1 - 1] = pqv[m1 + k * 400 - 401] * sum;
+				v_temp[m1 - 1] = pqv[m1 + k * mv - mv - 1] * sum;
 			sum -= half * xoptsq;
 			w[npt + k] = sum;
 			for (i = 1; i <= n; ++i) {
 				for (m1 = 1; m1 <= mv; ++m1)
-					gqv[m1 + i * 400 - 401] += v_temp[m1 - 1] * xpt[k + i * npt];
+					gqv[m1 + i * mv - mv - 1] += v_temp[m1 - 1] * xpt[k + i * npt];
 				xpt[k + i * npt] -= half * xopt[i];
 				vlag[i] = bmat[k + i * ndim];
 				w[i] = sum * xpt[k + i * npt] + tempq * xopt[i];
@@ -1460,22 +1436,22 @@ L120:
 		ih = 0;
 		for (j = 1; j <= n; ++j) {
 			for (m1 = 1; m1 <= mv; ++m1)
-				wv[m1 + j * 400 - 401] = zero;
+				wv[m1 + j * mv - mv - 1] = zero;
 			for (k = 1; k <= npt; ++k) {
 				for (m1 = 1; m1 <= mv; ++m1)
-					wv[m1 + j * 400 - 401] += pqv[m1 + k * 400 - 401] * xpt[k + j * npt];
+					wv[m1 + j * mv - mv - 1] += pqv[m1 + k * mv - mv - 1] * xpt[k + j * npt];
 				xpt[k + j * npt] -= half * xopt[j];
 			}
 			for (i = 1; i <= j; ++i) {
 				++ih;
 				if (i < j)
 					for (m1 = 1; m1 <= mv; ++m1)
-						gqv[m1 + j * 400 - 401] += hqv[m1 + ih * 400 - 401] * xopt[i];
+						gqv[m1 + j * mv - mv - 1] += hqv[m1 + ih * mv - mv - 1] * xopt[i];
 				for (m1 = 1; m1 <= mv; ++m1) {
-					gqv[m1 + i * 400 - 401] += hqv[m1 + ih * 400 - 401] * xopt[j];
-					hqv[m1 + ih * 400 - 401] = hqv[m1 + ih * 400 - 401] +
-						wv[m1 + i * 400 - 401] * xopt[j] +
-						wv[m1 + j * 400 - 401] * xopt[i];
+					gqv[m1 + i * mv - mv - 1] += hqv[m1 + ih * mv - mv - 1] * xopt[j];
+					hqv[m1 + ih * mv - mv - 1] = hqv[m1 + ih * mv - mv - 1] +
+						wv[m1 + i * mv - mv - 1] * xopt[j] +
+						wv[m1 + j * mv - mv - 1] * xopt[i];
 				}
 				bmat[npt + i + j * ndim] = bmat[npt + j + i * ndim];
 			}
@@ -1599,23 +1575,24 @@ L310:
 	ih = 0;
 	for (j = 1; j <= n; ++j) {
 		for (m1 = 1; m1 <= mv; ++m1)
-			v_vquad[m1 - 1] += d[j] * gqv[m1 + j * 400 - 401];
+			v_vquad[m1 - 1] += d[j] * gqv[m1 + j * mv - mv - 1];
 		for (i = 1; i <= j; ++i) {
 			++ih;
 			temp = d[i] * xnew[j] + d[j] * xopt[i];
 			if (i == j) temp = half * temp;
 			for (m1 = 1; m1 <= mv; ++m1)
-				v_vquad[m1 - 1] += temp * hqv[m1 + ih * 400 - 401];
+				v_vquad[m1 - 1] += temp * hqv[m1 + ih * mv - mv - 1];
 		}
 	}
 	for (k = 1; k <= npt; ++k)
 		for (m1 = 1; m1 <= mv; ++m1)
-			v_vquad[m1 - 1] += pqv[m1 + k * 400 - 401] * w[k];
+			v_vquad[m1 - 1] += pqv[m1 + k * mv - mv - 1] * w[k];
 	for (m1 = 1; m1 <= mv; ++m1)
 		diffv[m1 - 1] = v_err[m1 - 1] - v_opt[m1 - 1] - v_vquad[m1 - 1];
 	if (debug) fprintf(stdout, " Knew=%6ld vquad1 old=%25.15E\n", (long)knew, (double)vquad1);
 	if (knew > 0) {
-		REAL hd1[100] = {zero};
+		REAL hd1[n];
+		for (i = 0; i < n; ++i) hd1[i] = zero;
 		symv(n,one,&hq[1],1,&d[1],1,zero,hd1,1);
 		vquad1 = zero;
 		for (i = 1; i <= n; ++i)
@@ -1700,15 +1677,15 @@ L410:
 	ih = 0;
 	for (i = 1; i <= n; ++i) {
 		for (m1 = 1; m1 <= mv; ++m1)
-			v_temp[m1 - 1] = pqv[m1 + knew * 400 - 401] * xpt[knew + i * npt];
+			v_temp[m1 - 1] = pqv[m1 + knew * mv - mv - 1] * xpt[knew + i * npt];
 		for (j = 1; j <= i; ++j) {
 			++ih;
 			for (m1 = 1; m1 <= mv; ++m1)
-				hqv[m1 + ih * 400 - 401] += v_temp[m1 - 1] * xpt[knew + j * npt];
+				hqv[m1 + ih * mv - mv - 1] += v_temp[m1 - 1] * xpt[knew + j * npt];
 		}
 	}
 	for (m1 = 1; m1 <= mv; ++m1)
-		pqv[m1 + knew * 400 - 401] = zero;
+		pqv[m1 + knew * mv - mv - 1] = zero;
 	for (k = 1; k <= nptm; ++k) {
 		if (zmat[knew + k * npt] != zero) {
 			for (m1 = 1; m1 <= mv; ++m1)
@@ -1720,13 +1697,13 @@ L410:
 			}
 			for (j = 1; j <= npt; ++j)
 				for (m1 = 1; m1 <= mv; ++m1)
-					pqv[m1 + j * 400 - 401] += v_temp[m1 - 1] * zmat[j + k * npt];
+					pqv[m1 + j * mv - mv - 1] += v_temp[m1 - 1] * zmat[j + k * npt];
 		}
 	}
 	for (i = 1; i <= n; ++i) {
 		xpt[knew + i * npt] = xnew[i];
 		for (m1 = 1; m1 <= mv; ++m1)
-			gqv[m1 + i * 400 - 401] += diffv[m1 - 1] * bmat[knew + i * ndim];
+			gqv[m1 + i * mv - mv - 1] += diffv[m1 - 1] * bmat[knew + i * ndim];
 	}
 	if (f < fsave) kopt = knew;
 
