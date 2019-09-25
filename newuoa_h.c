@@ -1206,7 +1206,7 @@ static int newuob_h(const INTEGER n, const INTEGER npt, newuoa_dfovec* dfovec,
 	/* Local variables */
 	REAL alpha, beta, crvmin, delta, diff, diffa, diffb, diffc, dnorm, dsq,
 		dstep, f, fbeg, fopt, ratio, reciq, rho, rhosq, vquad1, xoptsq,
-		hd1[100], diffv[400], v_beg[400], v_err[400], v_opt[400], v_base[400],
+		diffv[400], v_beg[400], v_err[400], v_opt[400], v_base[400],
 		v_temp[400], v_vquad[400],
 		wv[40000]	/* was [400][100] */,
 		gqv[40000]	/* was [400][100] */,
@@ -1615,6 +1615,7 @@ L310:
 		diffv[m1 - 1] = v_err[m1 - 1] - v_opt[m1 - 1] - v_vquad[m1 - 1];
 	if (debug) fprintf(stdout, " Knew=%6ld vquad1 old=%25.15E\n", (long)knew, (double)vquad1);
 	if (knew > 0) {
+		REAL hd1[100] = {zero};
 		symv(n,one,&hq[1],1,&d[1],1,zero,hd1,1);
 		vquad1 = zero;
 		for (i = 1; i <= n; ++i)
