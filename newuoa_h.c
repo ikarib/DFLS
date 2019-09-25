@@ -1243,6 +1243,7 @@ static int newuob_h(const INTEGER n, const INTEGER npt, newuoa_dfovec* dfovec,
 	rho = zero;
 	vquad1 = zero;
 	xoptsq = zero;
+	dstep = zero;
 
 	/* Set the initial elements of XPT, BMAT, HQ, PQ and ZMAT to zero. */
 	for (j = 1; j <= n; ++j) {
