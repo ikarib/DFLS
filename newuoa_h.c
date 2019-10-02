@@ -28,7 +28,9 @@
       |MA  02110-1301  USA                                             |
       -----------------------------------------------------------------| */
 
+#if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
 #include "stdafx.h"
+#endif
 #include <stdio.h>
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -98,8 +100,8 @@ static int
 trsapp_h(const INTEGER n, const INTEGER npt, REAL* xopt, 
 	REAL* xpt, REAL* gq, REAL* hq, REAL* pq, 
 	const REAL delta, REAL* step, REAL* d, REAL* g, 
-	REAL* hd, REAL* hs, REAL* crvmin,
-	REAL* gqv, REAL* hqv, REAL* pqv,
+	REAL* hd, REAL* hs, REAL* gbeg, REAL* v_gtemp,
+	REAL* crvmin, REAL* gqv, REAL* hqv, REAL* pqv,
 	REAL* xbase, REAL* vquad, REAL* gqv_opt,
 	REAL* v_opt, REAL* v_base,
 	const REAL xoptsq, const INTEGER mv,
@@ -131,7 +133,7 @@ trsapp_h(const INTEGER n, const INTEGER npt, REAL* xopt,
 	REAL alpha, angle, angtest, bstep, cf, cth, dd, dg, dhd, dhs, ds,
 		f_base, f_opt, gg, ggbeg, ggsav, gnorm2, qadd, qbeg, qmin,
 		qnew, qred, qsav, ratio, reduc, sg, sgk, shs, ss, sth, t1, t2,
-		temp, tempa, tempb, *gbeg = new REAL[n], *v_gtemp = new REAL[mv];
+		temp, tempa, tempb;
 	INTEGER i, ih, isave, iterc, itermax, itersw, iu, j, k, m1;
 	LOGICAL zero_res;
 	
@@ -444,8 +446,6 @@ L160:
 		fprintf(stdout, " vquad=%25.15E Stepsize=%25.15E\n", (double)*vquad, (double)SQRT(t));
 		if (SQRT(t) >= half * delta) return -100;
 	}
-	delete[] gbeg;
-	delete[] v_gtemp;
 	return 0;
 } /* trsapp_h */
 
@@ -1154,7 +1154,9 @@ static int newuob_h(const INTEGER n, const INTEGER npt, newuoa_dfovec* dfovec,
 	REAL* xbase, REAL* xopt, REAL* xnew, 
 	REAL* xpt, REAL* gq, REAL* hq, REAL* pq, 
 	REAL* bmat, REAL* zmat, const INTEGER ndim, REAL* d, 
-	REAL* vlag, REAL* w, const INTEGER mv)
+	REAL* vlag, REAL* w, REAL* diffv, REAL* v_beg, REAL* v_err, REAL* v_opt,
+	REAL* v_base, REAL* v_temp, REAL* v_vquad, REAL* wv, REAL* gqv, REAL* hqv,
+	REAL* pqv, REAL* gqv_opt, REAL *hd1, const INTEGER mv)
 {
 /*	The arguments N, NPT, DFOVEC, DATA, X, RHOBEG, RHOEND, IPRINT, MAXFUN and MV
 	are identical to the corresponding arguments in SUBROUTINE NEWUOA_H.
@@ -1199,12 +1201,7 @@ static int newuob_h(const INTEGER n, const INTEGER npt, newuoa_dfovec* dfovec,
 
 	/* Local variables */
 	REAL alpha, beta, crvmin, delta, diff, diffa, diffb, diffc, dnorm, dsq,
-		dstep, f, fbeg, fopt, ratio, reciq, rho, rhosq, vquad1, xoptsq,
-		*diffv = new REAL[mv], *v_beg = new REAL[mv], *v_err = new REAL[mv],
-		*v_opt = new REAL[mv], *v_base = new REAL[mv], *v_temp = new REAL[mv],
-		*v_vquad = new REAL[mv], *wv = new REAL[mv*n], *gqv = new REAL[mv*n],
-		*hqv = new REAL[mv*n*(n+1)/2], *pqv = new REAL[mv*npt],
-		*gqv_opt = new REAL[mv*n];
+		dstep, f, fbeg, fopt, ratio, reciq, rho, rhosq, vquad1, xoptsq;
 	INTEGER idz, ih, ip, iteropt, knew, kopt, ksave, m1, nf, nfm, nfmm, nfsav;
 	LOGICAL model_update = 1, opt_update = 1;
 	int status;
@@ -1362,8 +1359,8 @@ L100:
 	knew = 0;
 	if (debug) fprintf(stdout, " Before TRSAPP: delta=%25.15E  rho=%25.15E\n", (double)delta, (double)rho);
 	status = trsapp_h(n, npt, &xopt[1], &xpt[npt+1], &gq[1], &hq[1], &pq[1], 
-		delta, &d[1], &w[1], &w[np], &w[np + n], &w[np + n * 2], &
-		crvmin, gqv, hqv, pqv, &xbase[1], &vquad1, gqv_opt, v_opt, 
+		delta, &d[1], &w[1], &w[np], &w[np+n], &w[np+2*n], &w[np+3*n], &w[np+4*n],
+		&crvmin, gqv, hqv, pqv, &xbase[1], &vquad1, gqv_opt, v_opt, 
 		v_base, xoptsq, mv, &model_update, &opt_update);
 	if (status) return status;
 	dsq = zero;
@@ -1598,7 +1595,6 @@ L310:
 		diffv[m1 - 1] = v_err[m1 - 1] - v_opt[m1 - 1] - v_vquad[m1 - 1];
 	if (debug) fprintf(stdout, " Knew=%6ld vquad1 old=%25.15E\n", (long)knew, (double)vquad1);
 	if (knew > 0) {
-		REAL *hd1 = new REAL[n];
 		for (i = 0; i < n; ++i) hd1[i] = zero;
 		symv(n,one,&hq[1],1,&d[1],1,zero,hd1,1);
 		vquad1 = zero;
@@ -1806,18 +1802,6 @@ done:
 		} else if (reason != NULL) print_error(reason);
 	}
 
-	delete[] diffv;
-	delete[] v_beg;
-	delete[] v_err;
-	delete[] v_opt;
-	delete[] v_base;
-	delete[] v_temp;
-	delete[] v_vquad;
-	delete[] wv;
-	delete[] gqv;
-	delete[] hqv;
-	delete[] pqv;
-	delete[] gqv_opt;
 	/* Return current status. */
 	return status;
 } /* newuob_h */
@@ -1829,8 +1813,9 @@ int newuoa_h(const INTEGER n, const INTEGER npt, newuoa_dfovec* dfovec,
 	const void* data, REAL* x, const REAL rhobeg, const REAL rhoend,
 	const INTEGER iprint, const INTEGER maxfun, REAL* w, const INTEGER mv)
 {
-	INTEGER id, np, iw, igq, ihq, ixb, ipq, ivl, ixn, ixo, ixp, ndim, 
-		nptm, ibmat, izmat;
+	INTEGER ndim, np, nptm, ixb, ixo, ixn, ixp, igq, ihq, ipq, ibmat, izmat,
+		id, ivl, iw, idiffv, iv_beg, iv_err, iv_opt, iv_base,
+		iv_temp, iv_vquad, iwv, igqv, ihqv, ipqv, igqv_opt, ihd1;
 
 	/* Partition the working space array, so that different parts of it can be
 	   treated separately by the subroutine that performs the main calculation. */
@@ -1853,13 +1838,28 @@ int newuoa_h(const INTEGER n, const INTEGER npt, newuoa_dfovec* dfovec,
 	id = izmat + npt * nptm;
 	ivl = id + n;
 	iw = ivl + ndim;
+	idiffv = iw + 10*ndim;
+	iv_beg = idiffv + mv;
+	iv_err = iv_beg + mv;
+	iv_opt = iv_err + mv;
+	iv_base = iv_opt + mv;
+	iv_temp = iv_base + mv;
+	iv_vquad = iv_temp + mv;
+	iwv = iv_vquad + mv;
+	igqv = iwv + mv*n;
+	ihqv = igqv + mv*n;
+	ipqv = ihqv + mv*n*(n+1)/2;
+	igqv_opt = ipqv + mv*npt;
+	ihd1 = igqv_opt + mv*n;
 
 	/* The above settings provide a partition of W for subroutine NEWUOB_H. */
 
 	return newuob_h(n, npt, dfovec, data, x, rhobeg, rhoend, iprint, maxfun,
 		&w[ixb], &w[ixo], &w[ixn], &w[ixp], &w[igq],
 		&w[ihq], &w[ipq], &w[ibmat], &w[izmat], ndim, &w[id],
-		&w[ivl], &w[iw], mv);
+		&w[ivl], &w[iw], &w[idiffv], &w[iv_beg], &w[iv_err], &w[iv_opt],
+		&w[iv_base], &w[iv_temp], &w[iv_vquad], &w[iwv], &w[igqv],
+		&w[ihqv], &w[ipqv], &w[igqv_opt], &w[ihd1], mv);
 } /* newuoa_h */
 
 const char* newuoa_reason(int status)
@@ -1930,7 +1930,7 @@ static void dfovec_test(const INTEGER n, const INTEGER mv,
 void newuoa_h_test(void)
 {
 	const INTEGER nmax = 8, nptmax = 2*nmax+1, mmax = nmax+1,
-		nspace=(nptmax+11)*(nptmax+nmax)+nmax*(3*nmax+11)/2;
+		nspace=(nptmax+11)*(nptmax+nmax)+nmax*(5*nmax+11)/2+mmax*(nptmax+nmax*(nmax+7)/2+7);
   	REAL w[nspace], x[nmax], v_err[mmax], rhobeg, rhoend, f;
 	INTEGER i, n, npt, mv, iprint, maxfun;
 

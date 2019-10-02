@@ -99,7 +99,7 @@ typedef void newuoa_dfovec(const INTEGER n, const INTEGER mv, const REAL* x,
                      as much as it could.
 
    The array W will be used for working space. Its length must be at least
-   (NPT+11)*(NPT+N)+N*(3*N+11)/2
+   (NPT+11)*(NPT+N)+N*(5*N+11)/2+MV*(NPT+N*(N+7)/2+7)
 
    The returned value should be NEWUOA_SUCCESS, but a different value can be
    returned upon error (see `newuoa_reason` for an explanatory message). */
