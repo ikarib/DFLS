@@ -49,7 +49,7 @@ very-clean: clean
 ${LIBNAME}: ${OBJS}
 	${AR} ${ARFLAGS} $@ $^
 
-${NAME}.o: ${srcdir}/${NAME}.c ${srcdir}/${NAME}.h
+${NAME}.o: ${srcdir}/${NAME}.cpp ${srcdir}/${NAME}.h
 	${CC} ${CFLAGS} ${DOUBLE} -UTESTING -c $< -o $@
 
 
@@ -96,7 +96,7 @@ test-f2c: ${NAME}-f2c.out ${NAME}-orig.out
 
 ### Conversion and optimizations by hand.
 
-${NAME}-test.o: ${srcdir}/${NAME}.c ${srcdir}/${NAME}.h
+${NAME}-test.o: ${srcdir}/${NAME}.cpp ${srcdir}/${NAME}.h
 	${CC} ${CFLAGS} ${DOUBLE} -DTESTING -c $< -o $@
 
 ${NAME}-test: ${NAME}-test.o

@@ -28,7 +28,9 @@
       |MA  02110-1301  USA                                             |
       -----------------------------------------------------------------| */
 
+#include "stdafx.h"
 #include <stdio.h>
+#define _USE_MATH_DEFINES
 #include <math.h>
 #include "newuoa_h.h"
 
@@ -129,10 +131,10 @@ trsapp_h(const INTEGER n, const INTEGER npt, REAL* xopt,
 	REAL alpha, angle, angtest, bstep, cf, cth, dd, dg, dhd, dhs, ds,
 		f_base, f_opt, gg, ggbeg, ggsav, gnorm2, qadd, qbeg, qmin,
 		qnew, qred, qsav, ratio, reduc, sg, sgk, shs, ss, sth, t1, t2,
-		temp, tempa, tempb, gbeg[n], v_gtemp[mv];
+		temp, tempa, tempb, *gbeg = new REAL[n], *v_gtemp = new REAL[mv];
 	INTEGER i, ih, isave, iterc, itermax, itersw, iu, j, k, m1;
 	LOGICAL zero_res;
-
+	
 	/* Parameter adjustments */
 	xpt -= npt+1;
 	--xopt;
@@ -442,6 +444,8 @@ L160:
 		fprintf(stdout, " vquad=%25.15E Stepsize=%25.15E\n", (double)*vquad, (double)SQRT(t));
 		if (SQRT(t) >= half * delta) return -100;
 	}
+	delete[] gbeg;
+	delete[] v_gtemp;
 	return 0;
 } /* trsapp_h */
 
@@ -1196,9 +1200,11 @@ static int newuob_h(const INTEGER n, const INTEGER npt, newuoa_dfovec* dfovec,
 	/* Local variables */
 	REAL alpha, beta, crvmin, delta, diff, diffa, diffb, diffc, dnorm, dsq,
 		dstep, f, fbeg, fopt, ratio, reciq, rho, rhosq, vquad1, xoptsq,
-		diffv[mv], v_beg[mv], v_err[mv], v_opt[mv], v_base[mv],
-		v_temp[mv], v_vquad[mv], wv[mv*n], gqv[mv*n], hqv[mv*n*(n+1)/2],
-		pqv[mv*npt], gqv_opt[mv*n];
+		*diffv = new REAL[mv], *v_beg = new REAL[mv], *v_err = new REAL[mv],
+		*v_opt = new REAL[mv], *v_base = new REAL[mv], *v_temp = new REAL[mv],
+		*v_vquad = new REAL[mv], *wv = new REAL[mv*n], *gqv = new REAL[mv*n],
+		*hqv = new REAL[mv*n*(n+1)/2], *pqv = new REAL[mv*npt],
+		*gqv_opt = new REAL[mv*n];
 	INTEGER idz, ih, ip, iteropt, knew, kopt, ksave, m1, nf, nfm, nfmm, nfsav;
 	LOGICAL model_update = 1, opt_update = 1;
 	int status;
@@ -1592,7 +1598,7 @@ L310:
 		diffv[m1 - 1] = v_err[m1 - 1] - v_opt[m1 - 1] - v_vquad[m1 - 1];
 	if (debug) fprintf(stdout, " Knew=%6ld vquad1 old=%25.15E\n", (long)knew, (double)vquad1);
 	if (knew > 0) {
-		REAL hd1[n];
+		REAL *hd1 = new REAL[n];
 		for (i = 0; i < n; ++i) hd1[i] = zero;
 		symv(n,one,&hq[1],1,&d[1],1,zero,hd1,1);
 		vquad1 = zero;
@@ -1800,6 +1806,18 @@ done:
 		} else if (reason != NULL) print_error(reason);
 	}
 
+	delete[] diffv;
+	delete[] v_beg;
+	delete[] v_err;
+	delete[] v_opt;
+	delete[] v_base;
+	delete[] v_temp;
+	delete[] v_vquad;
+	delete[] wv;
+	delete[] gqv;
+	delete[] hqv;
+	delete[] pqv;
+	delete[] gqv_opt;
 	/* Return current status. */
 	return status;
 } /* newuob_h */
