@@ -70,5 +70,5 @@ Copyright (c) 2009, Mike Powell (FORTRAN version).
 Copyright (c) 2010, Hongchao Zhang (FORTRAN version).
 Copyright (c) 2019, Iskander Karibzhanov (C version).
 
-Read the accompanying [`LICENSE`](../LICENSE) file for details.
+Read the accompanying [`LICENSE`](./LICENSE) file for details.
 
